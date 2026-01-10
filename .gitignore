@@ -3,15 +3,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# 音频文件 (忽略所有 aac, wav, mp3)
-*.aac
-*.wav
-*.mp3
-*.m4a
-
-# 结果和缓存文件 (忽略转录结果)
-*.json
-*_结果.txt
+# 忽略所有输出文件
+output/
 
 # 虚拟环境
 venv/

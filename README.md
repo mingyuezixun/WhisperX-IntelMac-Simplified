@@ -44,16 +44,17 @@ python main.py --file "meeting.aac" --num 2
 --lang,识别语言,zh
 
 📂 项目结构
-main.py: 主程序脚本。
-requirements.txt: Python 依赖清单。
-.gitignore: 已配置自动忽略音频、模型权重及 JSON 缓存。
-*_16k_mono.wav: 自动生成的预处理音频（运行后产生）。
-*_transcribe.json: 自动生成的转录缓存（支持中文查看）。
-*_结果.txt: 最终的简体中文转录稿。
+- main.py: 主程序脚本。
+- requirements.txt: Python 依赖清单。
+- .gitignore: 已配置自动忽略音频、模型权重及 JSON 缓存。
+- *_16k_mono.wav: 自动生成的预处理音频（运行后产生）。
+- *_transcribe.json: 自动生成的转录缓存（支持中文查看）。
+- *_结果.txt: 最终的简体中文转录稿。
 
 ⚠️ Intel Mac 运行建议
-性能预期：对于 1 小时音频，Intel Mac 的总处理时间约为 1 小时左右（1:1）。
-散热提示：说话人识别（Diarization）阶段 CPU 负载极高，请确保通风良好，接通电源。
-内存优化：本项目默认使用 int8 计算类型，有效避免 16GB 内存机型崩溃。
+- 性能预期：对于 1 小时音频，Intel Mac 的总处理时间约为 1 小时左右（1:1）。
+- 散热提示：说话人识别（Diarization）阶段 CPU 负载极高，请确保通风良好，接通电源。
+- 内存优化：本项目默认使用 int8 计算类型，有效避免 16GB 内存机型崩溃。
 
-⚖️ 协议MIT License
+⚖️ 协议
+- MIT License
