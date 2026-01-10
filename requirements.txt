@@ -1,0 +1,5 @@
+torch==2.5.1
+whisperx
+pydub==0.25.1
+opencc-python-reimplemented==0.1.7
+tqdm
