@@ -1,7 +1,6 @@
 services:
   whisper-station:
-    build: .                 # 告诉 Docker 在当前目录寻找 Dockerfile 进行构建
-    image: whisper-best-env:v1 # 给构建出来的镜像起个名字
+    image: whisper-final:v1 # 给构建出来的镜像起个名字
     container_name: whisper_offline
     volumes:
       - .:/app
@@ -16,5 +15,5 @@ services:
       - TZ=Asia/Shanghai
     tty: true
     stdin_open: true
-    # 注意：这里的 command 变简单了，不再需要 pip install
-    command: bash
+    # ✅ 启动命令简化为 tail，保持容器后台存活即可
+    command: tail -f /dev/null
