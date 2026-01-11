@@ -5,6 +5,21 @@ import json
 import time
 import argparse
 import warnings
+import torch
+# --- 增强版 PyTorch 2.6 兼容补丁 ---
+import builtins
+
+# 定义一个包装函数，强制设置 weights_only=False
+original_load = torch.load
+def patched_load(*args, **kwargs):
+    kwargs['weights_only'] = False
+    return original_load(*args, **kwargs)
+
+# 替换掉 torch 的全局加载函数
+torch.load = patched_load
+# --------------------------------
+import whisperx
+from opencc import OpenCC
 
 # 屏蔽繁琐的警告
 warnings.filterwarnings("ignore")
@@ -23,13 +38,6 @@ def install_requirements():
         except ImportError:
             print(f"📦 正在自动安装缺失的库: {install_name}...")
             subprocess.check_call([sys.executable, "-m", "pip", "install", install_name])
-
-# 启动前检查环境
-install_requirements()
-
-import torch
-import whisperx
-from opencc import OpenCC
 
 def run():
     # 1. 解析命令行参数
@@ -67,12 +75,25 @@ def run():
     
     # 4. 转录阶段
     print(f">> [步骤 1/4] 加载模型...")
-    model = whisperx.load_model("base", device, compute_type=compute_type, language="zh")
+    model = whisperx.load_model(
+        "base", 
+        device, 
+        compute_type=compute_type, 
+        language="zh",
+        asr_options={
+            "beam_size": 5
+        }
+    )
     audio = whisperx.load_audio(optimized_audio)
 
     if not os.path.exists(cache_file):
         print(f">> [步骤 2/4] 正在转录...")
-        result = model.transcribe(audio, batch_size=4, print_progress=True)
+        result = model.transcribe(
+            audio, 
+            batch_size=4, 
+            print_progress=True,
+            language="zh",
+        )
         with open(cache_file, "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False, indent=4)
     else:
@@ -99,5 +120,7 @@ def run():
     print(f"✅ 完成！结果已保存至: {output_txt}")
 
 if __name__ == "__main__":
+    # 启动前检查环境
+    install_requirements()
     run()
     

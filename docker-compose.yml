@@ -1,0 +1,20 @@
+services:
+  whisper-station:
+    build: .                 # 告诉 Docker 在当前目录寻找 Dockerfile 进行构建
+    image: whisper-best-env:v1 # 给构建出来的镜像起个名字
+    container_name: whisper_offline
+    volumes:
+      - .:/app
+      - ~/.cache:/root/.cache
+      - ./output:/app/output
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    working_dir: /app
+    environment:
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+      - TZ=Asia/Shanghai
+    tty: true
+    stdin_open: true
+    # 注意：这里的 command 变简单了，不再需要 pip install
+    command: bash

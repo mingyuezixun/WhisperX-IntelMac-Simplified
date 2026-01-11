@@ -1,60 +1,66 @@
 # WhisperX-IntelMac-Simplified 🎙️
 
-**针对 2019 款 Intel Mac 深度优化的 WhisperX 自动化转录方案。**
+**专为 2019 款 Intel Mac 优化的 WhisperX 自动化转录方案。**
 
 
 
-## 🌟 为什么选择这个方案？
-在 Intel Mac（如 2019 MacBook Pro）上运行 WhisperX 往往面临：CPU 过热、内存溢出（OOM）、AAC 坏帧导致崩溃、输出繁体中文等痛点。本项目通过以下技术手段解决了这些问题：
+## 🌟 核心痛点解决
+本项目针对 Intel Mac 运行原版 WhisperX 时的常见问题进行了深度调优：
+- **性能优化**：自动将音频预处理为 16kHz 单声道 WAV，显著降低 CPU 负载。
+- **鲁棒性增强**：忽略 AAC 坏帧，防止转录中途崩溃。
+- **智能缓存**：引入 JSON 缓存机制，若说话人识别（Diarization）失败，重启后可跳过转录直接继续。
+- **本地化**：集成 `OpenCC` 自动完成繁简转换。
+- **环境隔离**：提供一键式 Docker 方案，免去繁琐的 PyTorch 和 FFmpeg 环境配置。
 
--   **音频预处理**：自动调用 FFmpeg 将采样率降至 16kHz 并转为单声道 WAV，大幅减轻 CPU 压力。
--   **鲁棒性修复**：强制忽略 AAC 损坏帧，防止转录中途报错。
--   **智能缓存系统**：引入 JSON 缓存机制。若在说话人识别阶段崩溃，重启后直接读取缓存，无需重复转录。
--   **中文本地化**：集成 `OpenCC` 自动繁简转换，并支持非 ASCII 中文 JSON 导出。
--   **一键式体验**：从环境安装到命令行传参处理，全流程自动化。
+---
 
-## 🛠️ 环境要求
-1.  **FFmpeg**: 必须在系统级安装。
-    ```bash
-    brew install ffmpeg
-    ```
-2.  **Python**: 建议版本 3.10+。
-3.  **Docker (可选)**: 建议在 Docker 容器内运行以隔离环境。
+## 🛠️ 快速开始 (Docker 推荐)
 
-## 🚀 安装与运行
+这是最简单的方法，无需在宿主机安装任何 Python 依赖。
 
-### 1. 克隆仓库
+### 1. 克隆项目
 ```bash
-git clone [https://github.com/你的用户名/WhisperX-IntelMac-Simplified.git](https://github.com/你的用户名/WhisperX-IntelMac-Simplified.git)
+git clone [https://github.com/mingyuezixun/WhisperX-IntelMac-Simplified.git](https://github.com/mingyuezixun/WhisperX-IntelMac-Simplified.git)
 cd WhisperX-IntelMac-Simplified
 ```
-
-### 2. 安装依赖脚本内置了自动安装逻辑，你也可以手动安装：
+### 2. 构建环境
 ```bash
-pip install -r requirements.txt
+# 这一步会根据 Dockerfile 预装所有依赖，仅需执行一次
+docker-compose build
 ```
-### 3. 一键转录将音频文件（如 meeting.aac）放入项目根目录，运行：
+### 3. 启动容器并执行
+将你的音频文件（如 meeting.aac）放入项目根目录，然后：
 ```bash
-python main.py --file "meeting.aac" --num 2
+# 启动容器
+docker-compose up -d
+
+# 运行转录命令（结果将生成在 output/ 文件夹下）
+docker exec -it whisper_offline python3 main.py --file "meeting.aac" --num 2
 ```
-⚙️ 命令行参数说明参数说明
-参数,说明,默认值
---file,(必填) 原始音频路径,无
---num,预期的说话人数量,2
---lang,识别语言,zh
+📂 目录结构说明
+```Plaintext
+WhisperX-IntelMac-Simplified/
+├── main.py                # 主程序：逻辑处理核心
+├── Dockerfile             # 镜像构建文件（含清华源加速）
+├── docker-compose.yml     # 容器编排文件
+├── requirements.txt       # Python 依赖清单
+├── .gitignore             # 自动忽略大文件和缓存
+└── output/                # [自动生成] 存放 WAV、JSON 缓存及最终转录结果
+```
+⚙️ 命令行参数
 
-📂 项目结构
-- main.py: 主程序脚本。
-- requirements.txt: Python 依赖清单。
-- .gitignore: 已配置自动忽略音频、模型权重及 JSON 缓存。
-- *_16k_mono.wav: 自动生成的预处理音频（运行后产生）。
-- *_transcribe.json: 自动生成的转录缓存（支持中文查看）。
-- *_结果.txt: 最终的简体中文转录稿。
+|参数|说明|默认值|
+| ----- | ------- |------- |
+|--file|(必填) 原始音频路径|无|
+|--num|预期的说话人数量|2|
+|--lang|识别语言|zh|
 
-⚠️ Intel Mac 运行建议
-- 性能预期：对于 1 小时音频，Intel Mac 的总处理时间约为 1 小时左右（1:1）。
-- 散热提示：说话人识别（Diarization）阶段 CPU 负载极高，请确保通风良好，接通电源。
-- 内存优化：本项目默认使用 int8 计算类型，有效避免 16GB 内存机型崩溃。
+💡 Intel Mac 运行贴士
+- 1.散热建议：Intel Mac 在进行 Diarization 阶段 CPU 会满载，建议接通电源并保持散热通畅。
 
-⚖️ 协议
-- MIT License
+- 2.离线模式：如果你已经将模型下载到 ~/.cache，本项目已配置自动挂载，可实现真正的离线运行。
+
+- 3.输出结果：所有结果将自动生成在 output/ 文件夹下，根目录保持整洁。
+
+📜 协议
+MIT License
