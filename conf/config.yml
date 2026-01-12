@@ -1,0 +1,13 @@
+# conf/config.yml
+# 基础路径配置
+input: ""
+output: "outputs"
+
+# 模型与性能配置 (锁定你电脑适配的参数)
+model: "small"
+batch_size: 4
+compute_type: "int8"
+device: "cpu"
+
+# 其他逻辑开关
+local_files_only: true
