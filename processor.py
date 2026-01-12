@@ -2,6 +2,7 @@
 import whisperx
 import torch
 import os
+import sys
 import json
 import gc
 import logging
@@ -12,7 +13,7 @@ class WhisperProcessor:
     def __init__(self, args, strategy, config):
         setup_environment() # 初始化环境
         
-        self.input_file = args.input_file
+        self.input_file = args.input
         self.output_dir = args.output
         self.strategy = strategy # 这里接收一个策略对象
         self.config = config     # 参数字典 (num, model, device等)
@@ -30,9 +31,11 @@ class WhisperProcessor:
         self.audio = None
         self.transcript_result = None
         self.diarize_result = None
+        self.logger = None
 
         # 初始化目录
         self._init_directories()
+        self._init_logger()
 
     def _init_directories(self):
         """
@@ -62,7 +65,7 @@ class WhisperProcessor:
 
     def _init_logger(self):
         """固定方法名：配置日志输出到文件和控制台"""
-        file_base_name = os.path.splitext(os.path.basename(self.input_path))[0]
+        file_base_name = os.path.splitext(os.path.basename(self.input_file))[0]
         log_file = os.path.join(self.log_dir, f"{file_base_name}.log")
 
         # 配置日志格式
