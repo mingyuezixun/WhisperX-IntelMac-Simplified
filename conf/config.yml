@@ -1,13 +1,22 @@
 # conf/config.yml
 # 基础路径配置
 input: ""
-output: "outputs"
+output: "./output"
+
+# 日志配置
+# 可选值: DEBUG, INFO, WARNING, ERROR, CRITICAL
+log_level: "INFO"
+logs_dir: "./logs"
 
 # 模型与性能配置 (锁定你电脑适配的参数)
-model: "small"
-batch_size: 4
-compute_type: "int8"
-device: "cpu"
+model: "small" # 可选值：tiny, base, small, medium, large
+batch_size: 4 # 批处理大小，根据内存调整
+compute_type: "int8" # 可选值：int8, float16, float32
+device: "cpu" # 可选值：cpu, mps, cuda
+threads: 4 # 使用的线程数
+num_speakers: 2 # 预估说话人数，默认为2，如果不是2个人记得修改
+language: "zh" # 语言代码，如 zh, en
 
-# 其他逻辑开关
-local_files_only: true
+# 分段处理配置
+mode: "segmented" # 可选值：full（全量）, segmented （分段）
+chunk: 10 # 如果mode=segmented，则每个音频块的时长，单位为分钟

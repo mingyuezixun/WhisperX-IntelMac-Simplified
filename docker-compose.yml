@@ -6,6 +6,7 @@ services:
       - .:/app
       - ~/.cache:/root/.cache
       - ./output:/app/output
+      - ./logs:/app/logs
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     working_dir: /app
