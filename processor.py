@@ -2,18 +2,17 @@
 import whisperx
 import torch
 import os
-import json
 import gc
 import utils
 from logger import logger
-import subprocess
 from utils import export_results
+import subprocess
 
 class WhisperProcessor:
     def __init__(self, args, strategy, config):
         self.input_file = args.input
-        self.strategy = strategy # 这里接收一个策略对象
-        self.config = config     # 参数字典 (num, model, device等)
+        self.strategy = strategy # 接收 TranscribeStrategy 实例
+        self.config = config     # 参数字典
         self.output_dir = self.config['output']
 
         file_basename = os.path.basename(self.input_file)
@@ -23,51 +22,34 @@ class WhisperProcessor:
         self.output_txt = os.path.join(self.output_dir, f"{base_name_no_ext}_final.txt")
         # 优化后的音频路径
         self.optimized_audio = os.path.join(self.output_dir, f"{base_name_no_ext}_16k_mono.wav")
-        # 缓存文件路径
-        self.cache_file = os.path.join(self.output_dir, f"{base_name_no_ext}_transcribe.json")
-
-        self.audio = None
-        self.transcript_result = None
-        self.diarize_result = None
+        # 缓存文件路径: {filename}_{model}_transcribe.json
+        model_name = self.config.get('model', 'unknown')
+        self.cache_file = os.path.join(self.output_dir, f"{base_name_no_ext}_{model_name}_transcribe.json")
+        
+        self.model = None
+        self.diarize_model = None
 
         # 初始化目录
         self._init_directories()
 
     def _init_directories(self):
-        """
-        内部初始化方法，确保输出结构完整
-        """
-        # 确保根输出目录存在 (如: outputs/)
+        # 确保根输出目录存在
         utils.ensure_dir(self.output_dir)
-
-        # 针对当前文件创建独立的子目录 (如: outputs/test_audio/)
-        file_name = os.path.splitext(os.path.basename(self.input_file))[0]
-        
-        # 关键：创建任务目录，这样后续的缓存和结果都有家可归
-        self.task_dir = os.path.join(self.output_dir, file_name)
-        utils.ensure_dir(self.task_dir)
-
-        # 建议：创建一个隐藏的缓存目录，专门放分段、VAD 等临时文件
-        self.cache_dir = os.path.join(self.task_dir, ".cache")
-        utils.ensure_dir(self.cache_dir)
+        # 针对当前文件创建独立的子目录 (可选，保持原逻辑)
+        # file_name = os.path.splitext(os.path.basename(self.input_file))[0]
+        # self.task_dir = os.path.join(self.output_dir, file_name)
+        # utils.ensure_dir(self.task_dir)
 
     def load_resource(self):
-        # 优化音频采样率
+        # 1. 优化音频
         if not os.path.exists(self.optimized_audio):
             logger.info(f"正在优化音频采样率...")
             cmd = f"ffmpeg -err_detect ignore_err -i '{self.input_file}' -ar 16000 -ac 1 -c:a pcm_s16le '{self.optimized_audio}' -y -loglevel quiet"
             subprocess.run(cmd, shell=True)
 
-        logger.info("[Processor] 加载音频...")
-        self.audio = whisperx.load_audio(self.optimized_audio)
-
-    def transcribe(self):
-        """
-        transcribe 的 Docstring
-        转录音频为文本
-        """
-        logger.info("[Processor] 开始转录文本...")
-        model = whisperx.load_model(
+        # 2. 加载 Whisper 模型
+        logger.info("[Processor] Loading Whisper Model...")
+        self.model = whisperx.load_model(
             self.config['model'], 
             self.config['device'], 
             compute_type=self.config['compute_type'],
@@ -75,62 +57,63 @@ class WhisperProcessor:
             asr_options={"beam_size": 5}
         )
 
-        if not os.path.exists(self.cache_file):
-            logger.info(">> 正在转录 (VAD优化版)...")
-            self.transcript_result = model.transcribe(
-                self.audio, 
-                batch_size=self.config['batch_size'], 
-                print_progress=True,
-                language=self.config['language'],
-            )
-            with open(self.cache_file, "w", encoding="utf-8") as f:
-                json.dump(self.transcript_result, f, ensure_ascii=False, indent=4)
-        else:
-            logger.info(">> 读取转录缓存...")
-            with open(self.cache_file, "r", encoding="utf-8") as f:
-                self.transcript_result = json.load(f)
-        
-        # 转录完立刻手动清理内存，为声纹识别腾空间
-        del model
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()    
-
-    def diarize(self):
-        logger.info("[Processor] 开始声纹识别...")
-        
-        # 配置线程 (Intel Mac 优化)
+        # 3. 加载 Diarization 模型
+        logger.info("[Processor] Loading Diarization Pipeline...")
+        # 配置线程
         torch.set_num_threads(self.config['threads'])
-        
-        # 初始化 Pipeline
-        pipeline = whisperx.diarize.DiarizationPipeline(use_auth_token=None, device=self.config['device'])
-        pipeline.segmentation_step = 0.5
-        # 【关键点】这里调用策略对象的 run 方法，Processor 不关心具体怎么跑
-        self.diarize_result = self.strategy.run(
-            pipeline, 
-            self.audio, 
-            self.config['num_speakers']
+        self.diarize_model = whisperx.diarize.DiarizationPipeline(
+            use_auth_token=None,  # 假设用户已经登录或不需要 token
+            device=self.config['device']
         )
-        
-        if self.diarize_result is None:
-            logger.info("[Processor] 严重错误：声纹识别未返回任何数据！")
-
-    def export(self):
-        if self.transcript_result:
-            export_results(
-                self.transcript_result["segments"], 
-                self.diarize_result, 
-                self.output_txt
-            )
-
-
+        self.diarize_model.segmentation_step = 0.5
 
     def run(self):
-        # 加载并优化资源
-        self.load_resource()
-        # 识别文字
-        self.transcribe()
-        # 识别声纹，知道哪个时间段是谁在说话
-        self.diarize()
-        # 导出
-        self.export()
+        try:
+            # 1. 准备资源
+            self.load_resource()
+            
+            # 2. 运行策略 (包含转录和说话人匹配)
+            # 注意：传入 optimized_audio 和 cache_file
+            result = self.strategy.process(
+                self.optimized_audio, 
+                self.model, 
+                self.diarize_model, 
+                self.config,
+                cache_file=self.cache_file
+            )
+            
+            # 3. 差异化导出
+            mode = self.config.get("mode", "full") # config 中应该包含 mode，或者这里判断策略类型
+            
+            # 此处判断一下 config 中的 mode，或者根据 result 特征判断
+            # 如果是 Full 模式，result['segments'] 里的 word 应该包含 speaker
+            # 如果是 Segment 模式，result['diarize_data'] 存在
+            
+            logger.info(f"执行导出 (Mode: {mode})...")
+            
+            if mode == "full":
+                # Full 模式：直接从 result['segments'] 里读 speaker 字段
+                with open(self.output_txt, "w", encoding="utf-8") as f:
+                    for seg in result["segments"]:
+                        spk = seg.get("speaker", "未知")
+                        text = seg["text"].strip()
+                        f.write(f"[{spk}] {text}\n")
+            else:
+                # Segment 模式：调用自定义导出函数
+                export_results(
+                    result["segments"], 
+                    result.get("diarize_data"), 
+                    self.output_txt
+                )
+                
+            logger.info(f"[Processor] Done! Output: {self.output_txt}")
+
+        finally:
+            # 清理资源
+            if self.model:
+                del self.model
+            if self.diarize_model:
+                del self.diarize_model
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()

@@ -5,7 +5,7 @@ import json
 import utils
 from logger import logger, init_global_config
 from processor import WhisperProcessor
-from strategies import FullDiarization, SegmentedDiarization
+from transcribe_strategy import FullStrategy, SegmentStrategy
 
 def parse_args(conf):
     parser = argparse.ArgumentParser(description="WhisperX 模块化处理工具")
@@ -44,11 +44,12 @@ def main():
         print(f"❌ 文件不存在: {args.input}")
         return
     
-    # --- 简单工厂模式：决定使用哪种策略 ---
+    # --- 策略模式：决定使用哪种策略 ---
     if args.mode == "full":
-        strategy = FullDiarization()
+        strategy = FullStrategy()
     else:
-        strategy = SegmentedDiarization(chunk_mins=args.chunk)
+        # Segment 模式
+        strategy = SegmentStrategy(chunk_mins=args.chunk)
     # ----------------------------------
 
     # 配置参数
@@ -61,6 +62,7 @@ def main():
         "compute_type": conf.get("compute_type", "int8"),
         "batch_size": conf.get("batch_size", 4),
         "language": args.language,
+        "mode": args.mode, # 关键：传入 mode 供 processor 导出时判断
     }
     # 实例化并运行
     processor = WhisperProcessor(args, strategy, config)
