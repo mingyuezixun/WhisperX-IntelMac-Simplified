@@ -104,6 +104,7 @@ class WhisperProcessor:
             with open(self.output_txt, "w", encoding="utf-8") as f:
                 current_spk = None
                 line_buffer = []
+                merged_short_word = False  # 【新增】每次换人后只允许回溯一次
 
                 for seg in result["segments"]:
                     # 兼容性处理：如果某段没有对齐词信息，降级处理
@@ -119,6 +120,7 @@ class WhisperProcessor:
                             if converted:
                                 f.write(f"[{current_spk}] {converted}\n")
                             line_buffer = []
+                            merged_short_word = False  # 重置标志
                         
                         current_spk = spk
                         line_buffer.append(text)
@@ -144,15 +146,28 @@ class WhisperProcessor:
                         
                         # 说话人变了 -> 换行
                         if spk != current_spk:
-                            full_text = "".join(line_buffer)
-                            converted = cc.convert(full_text).strip()
-                            if converted:
-                                f.write(f"[{current_spk}] {converted}\n")
-                            
-                            # 重置
-                            current_spk = spk
-                            line_buffer = []
-                            line_buffer.append(word_text)
+                            # 【修复】单字回溯逻辑 (限制只回溯一次)
+                            # 场景：上一行的最后一个字被错误归到了新说话人
+                            # 例子："流出了" -> "流出"(A) + "了"(B) 是错误的
+                            # 策略：如果即将开始的新行的第一个词很短 (<=2字)，
+                            #       且本轮还没回溯过，就追加给上一个人
+                            if len(word_text) <= 2 and line_buffer and not merged_short_word:
+                                # 把这个短词追加给上一个说话人，不切换
+                                line_buffer.append(word_text)
+                                merged_short_word = True  # 标记已使用回溯机会
+                                # 不更新 current_spk，继续当前说话人
+                            else:
+                                # 正常换行
+                                full_text = "".join(line_buffer)
+                                converted = cc.convert(full_text).strip()
+                                if converted:
+                                    f.write(f"[{current_spk}] {converted}\n")
+                                
+                                # 重置
+                                current_spk = spk
+                                line_buffer = []
+                                line_buffer.append(word_text)
+                                merged_short_word = False  # 新说话人开始，重置标志
                         else:
                             # 说话人没变 -> 追加
                             line_buffer.append(word_text)
