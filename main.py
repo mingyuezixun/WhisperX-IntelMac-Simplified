@@ -12,7 +12,10 @@ def parse_args(conf):
     parser.add_argument("input", default=conf.get("input", ""), help="输入音频文件")
     parser.add_argument("--mode", choices=["full", "segment"], default=conf.get("mode", "full"), help="识别模式：full(全量) 或 segment(分段)")
     parser.add_argument("-m", "--model", type=str, default=conf.get("model", "small"), help="模型大小")
-    parser.add_argument("-n", "--num", type=int, default=conf.get("num_speakers", 2), help="说话人数")
+    parser.add_argument("-n", "--num", type=int, default=conf.get("num_speakers", None), help="说话人数 (固定)")
+    parser.add_argument("--min", type=int, default=conf.get("min_speakers", None), help="最少说话人数")
+    parser.add_argument("--max", type=int, default=conf.get("max_speakers", None), help="最多说话人数")
+    parser.add_argument("--hf_token", type=str, default=conf.get("hf_token", None), help="HuggingFace Token")
     parser.add_argument("-c", "--chunk", type=int, default=conf.get("chunk", 10), help="分段时长(分钟)，仅在 segment 模式有效")
     parser.add_argument("-l", "--language", type=str, default=conf.get("language", "zh"), help="语言代码，如 zh, en")
     return parser.parse_args()
@@ -52,17 +55,28 @@ def main():
         strategy = SegmentStrategy(chunk_mins=args.chunk)
     # ----------------------------------
 
+    # 说话人参数逻辑
+    min_speakers = args.min
+    max_speakers = args.max
+    # 如果指定了固定人数，优先级高于 min/max
+    if args.num is not None:
+        min_speakers = args.num
+        max_speakers = args.num
+
     # 配置参数
     config = {
         "model": args.model,
         "device": conf.get("device", "cpu"),
-        "num_speakers": args.num,
+        "num_speakers": args.num, # 保留以备不时之需，但主要用 min/max
+        "min_speakers": min_speakers,
+        "max_speakers": max_speakers,
+        "hf_token": args.hf_token,
         "threads": conf.get("threads", 4),
         "output": conf.get("output", "./outputs"),
         "compute_type": conf.get("compute_type", "int8"),
         "batch_size": conf.get("batch_size", 4),
         "language": args.language,
-        "mode": args.mode, # 关键：传入 mode 供 processor 导出时判断
+        "mode": args.mode, 
     }
     # 实例化并运行
     processor = WhisperProcessor(args, strategy, config)

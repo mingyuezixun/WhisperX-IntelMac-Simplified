@@ -13,6 +13,7 @@ services:
     environment:
       - HF_HUB_OFFLINE=1
       - TRANSFORMERS_OFFLINE=1
+      - HF_ENDPOINT=https://hf-mirror.com
       - TZ=Asia/Shanghai
     tty: true
     stdin_open: true

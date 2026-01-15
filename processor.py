@@ -7,6 +7,7 @@ import utils
 from logger import logger
 from utils import export_results
 import subprocess
+from opencc import OpenCC
 
 class WhisperProcessor:
     def __init__(self, args, strategy, config):
@@ -62,7 +63,7 @@ class WhisperProcessor:
         # 配置线程
         torch.set_num_threads(self.config['threads'])
         self.diarize_model = whisperx.diarize.DiarizationPipeline(
-            use_auth_token=None,  # 假设用户已经登录或不需要 token
+            use_auth_token=self.config.get("hf_token"), # 支持传入 Token
             device=self.config['device']
         )
         self.diarize_model.segmentation_step = 0.5
@@ -93,11 +94,13 @@ class WhisperProcessor:
             
             if mode == "full":
                 # Full 模式：直接从 result['segments'] 里读 speaker 字段
+                cc = OpenCC('t2s')
                 with open(self.output_txt, "w", encoding="utf-8") as f:
                     for seg in result["segments"]:
                         spk = seg.get("speaker", "未知")
-                        text = seg["text"].strip()
-                        f.write(f"[{spk}] {text}\n")
+                        text = cc.convert(seg["text"]).strip()
+                        if text:
+                            f.write(f"[{spk}] {text}\n")
             else:
                 # Segment 模式：调用自定义导出函数
                 export_results(

@@ -12,6 +12,8 @@
 - **性能优化**：自动将音频预处理为 16kHz 单声道 WAV。
 - **鲁棒性增强**：忽略 AAC 坏帧，防止 ffmpeg 处理时崩溃。
 - **本地化**：集成 `OpenCC` 自动完成繁体转简体。
+- **自定义说话人范围**：支持分别设置 `min_speakers` 和 `max_speakers`，解决人数识别不准的问题。
+- **HuggingFace Token 支持**：支持传入 HF Token 以使用更先进的 Pyannote 模型 (如 segmentation-3.0)。
 - **Docker 化**：一键式环境搭建，无需复杂的本地依赖配置。
 
 ---
@@ -66,6 +68,9 @@ docker exec -it whisper_offline python3 main.py --file "meeting.m4a" --mode full
 | `--num` | `-n` | 预期的说话人数量 (辅助聚类) | `2` | `-n 4` |
 | `--chunk` | `-c` | **分段时长(分钟)**，仅在 `segment` 模式下有效 | `10` | `-c 15` |
 | `--language` | `-l` | 识别语言代码 | `zh` | `-l en` |
+| `--min_speakers` | 无 | **(可选)** 最少说话人数 (覆盖 -n) | 无 | `--min_speakers 2` |
+| `--max_speakers` | 无 | **(可选)** 最多说话人数 (覆盖 -n) | 无 | `--max_speakers 5` |
+| `--hf_token` | 无 | HuggingFace Token (用于加载更强模型) | 无 | `--hf_token hf_...` |
 
 ---
 

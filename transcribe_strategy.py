@@ -58,6 +58,7 @@ class FullStrategy(TranscribeStrategy):
         
         # 2. 对齐 (assign_word_speakers 的前置必须步骤)
         logger.info(">> Step 2: Aligning...")
+
         model_a, metadata = whisperx.load_align_model(
             language_code=result["language"], 
             device=device
@@ -73,10 +74,11 @@ class FullStrategy(TranscribeStrategy):
         
         # 3. 说话人识别 (Diarization)
         logger.info(">> Step 3: Diarization...")
+        
         diarize_segments = diarize_model(
             audio_path, 
-            min_speakers=config.get("num_speakers"), 
-            max_speakers=config.get("num_speakers")
+            min_speakers=config.get("min_speakers"), 
+            max_speakers=config.get("max_speakers")
         )
         
         # 4. 【核心逻辑】使用官方方法匹配说话人
@@ -108,7 +110,8 @@ class SegmentStrategy(TranscribeStrategy):
         total_sec = len(audio) / 16000
         chunk_sec = self.chunk_mins * 60
         all_chunks = []
-        num_speakers = config.get("num_speakers")
+        min_speakers = config.get("min_speakers")
+        max_speakers = config.get("max_speakers")
 
         for i, start_s in enumerate(range(0, int(total_sec), chunk_sec)):
             end_s = min(start_s + chunk_sec, total_sec)
@@ -121,8 +124,8 @@ class SegmentStrategy(TranscribeStrategy):
                 # Run diarization on chunk
                 df = diarize_model(
                     chunk_audio, 
-                    min_speakers=num_speakers, 
-                    max_speakers=num_speakers
+                    min_speakers=min_speakers, 
+                    max_speakers=max_speakers
                 )
                 
                 # Use standard pandas functionality to avoid copy warnings if needed, 
