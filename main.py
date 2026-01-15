@@ -16,6 +16,10 @@ def parse_args(conf):
     parser.add_argument("--min", type=int, default=conf.get("min_speakers", None), help="最少说话人数")
     parser.add_argument("--max", type=int, default=conf.get("max_speakers", None), help="最多说话人数")
     parser.add_argument("--hf_token", type=str, default=conf.get("hf_token", None), help="HuggingFace Token")
+    parser.add_argument("--vad_onset", type=float, default=conf.get("vad_onset", 0.500), help="VAD Onset Threshold")
+    parser.add_argument("--vad_offset", type=float, default=conf.get("vad_offset", 0.363), help="VAD Offset Threshold")
+    parser.add_argument("--vad_min_duration_on", type=float, default=conf.get("vad_min_duration_on", 0.1), help="VAD 最小语音时长")
+    parser.add_argument("--vad_min_duration_off", type=float, default=conf.get("vad_min_duration_off", 0.1), help="VAD 最小静音时长")
     parser.add_argument("-c", "--chunk", type=int, default=conf.get("chunk", 10), help="分段时长(分钟)，仅在 segment 模式有效")
     parser.add_argument("-l", "--language", type=str, default=conf.get("language", "zh"), help="语言代码，如 zh, en")
     return parser.parse_args()
@@ -71,6 +75,10 @@ def main():
         "min_speakers": min_speakers,
         "max_speakers": max_speakers,
         "hf_token": args.hf_token,
+        "vad_onset": args.vad_onset,
+        "vad_offset": args.vad_offset,
+        "vad_min_duration_on": args.vad_min_duration_on,
+        "vad_min_duration_off": args.vad_min_duration_off,
         "threads": conf.get("threads", 4),
         "output": conf.get("output", "./outputs"),
         "compute_type": conf.get("compute_type", "int8"),

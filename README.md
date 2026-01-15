@@ -71,6 +71,28 @@ docker exec -it whisper_offline python3 main.py --file "meeting.m4a" --mode full
 | `--min_speakers` | 无 | **(可选)** 最少说话人数 (覆盖 -n) | 无 | `--min_speakers 2` |
 | `--max_speakers` | 无 | **(可选)** 最多说话人数 (覆盖 -n) | 无 | `--max_speakers 5` |
 | `--hf_token` | 无 | HuggingFace Token (用于加载更强模型) | 无 | `--hf_token hf_...` |
+| `--vad_onset` | 无 | **VAD 语音开始阈值** (0.0-1.0) | `0.5` | `--vad_onset 0.35` |
+| `--vad_offset` | 无 | **VAD 语音结束阈值** (0.0-1.0) | `0.363` | `--vad_offset 0.15` |
+| `--vad_min_duration_off` | 无 | **VAD 最小静音时长** (秒) | `0.1` | `--vad_min_duration_off 0.05` |
+
+### 🛠️ VAD 参数微调指南 (解决"说话人合并"问题)
+
+如果发现**不同说话人的话被粘在了一起**（即说话人合并），请尝试以下“黄金参数组合”：
+
+```bash
+--vad_onset 0.35 --vad_offset 0.15 --vad_min_duration_off 0.05
+```
+
+- **`--vad_onset` (建议 0.35 ~ 0.5)**: 
+  - **含义**: 多大的声音才算“开始说话”。
+  - **调小**: 更敏锐，能捕捉到低声倾诉（适合心理咨询）。
+  - **调大**: 更抗噪，忽略背景杂音。
+- **`--vad_offset` (建议 0.15 ~ 0.25)**: 
+  - **含义**: 多小的声音才算“结束说话”。
+  - **调小 (核心)**: **解决合并问题的关键**。设为 0.15 可以让系统检测到微小停顿时立即切断，分离紧挨着的对话。
+- **`--vad_min_duration_off` (建议 0.05 ~ 0.1)**: 
+  - **含义**: 两个人说话中间停顿了多久才切开。
+  - **调小**: 配合 offset 使用，专门解决“连珠炮”式的抢话场景。
 
 ---
 
@@ -84,7 +106,10 @@ docker exec -it whisper_offline python3 main.py --file "meeting.m4a" --mode full
 ### 2. Segment Mode (分段模式)
 - **流程**：`Transcribe` -> `Segmented Diarize` (按 Chunk 切分处理) -> `Merge`
 - **优点**：极低内存占用。通过物理切分音频，让 Diarization 每次只处理一小段（如 10 分钟），几乎可以在任何机器上跑完长达数小时的录音。
-- **缺点**：跳过了 `Align` 步骤，说话人匹配基于时间戳区间映射，精度略低于 Full Mode（但在长会议场景通常足够）。
+- **缺点**：
+    1. **说话人 ID 不一致**：由于每段音频独立识别，可能导致同一人在不同分段中被标记为不同 ID（如前10分钟是 Speaker_00，后10分钟变成了 Speaker_01），**需要手动后期合并**。
+    2. 跳过了 `Align` 步骤（旧版已优化，新版已补齐 Align，但 ID 不一致问题依然存在）。
+> **⚠️ 警告**：**即将废弃**。除非您的机器无法运行 Full 模式，否则强烈建议始终使用 **Full Mode** 以获得最佳准确性。
 
 ---
 

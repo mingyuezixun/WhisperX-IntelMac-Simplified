@@ -55,7 +55,13 @@ class WhisperProcessor:
             self.config['device'], 
             compute_type=self.config['compute_type'],
             language=self.config['language'],
-            asr_options={"beam_size": 5}
+            asr_options={"beam_size": self.config.get("beam_size", 5)},
+            vad_options={
+                "vad_onset": self.config.get("vad_onset", 0.5),
+                "vad_offset": self.config.get("vad_offset", 0.363),
+                "min_duration_on": self.config.get("vad_min_duration_on", 0.1),
+                "min_duration_off": self.config.get("vad_min_duration_off", 0.1)
+            }
         )
 
         # 3. 加载 Diarization 模型
@@ -92,22 +98,61 @@ class WhisperProcessor:
             
             logger.info(f"执行导出 (Mode: {mode})...")
             
-            if mode == "full":
-                # Full 模式：直接从 result['segments'] 里读 speaker 字段
-                cc = OpenCC('t2s')
-                with open(self.output_txt, "w", encoding="utf-8") as f:
-                    for seg in result["segments"]:
+            # 统一基于 Word-Level 重新构建句子 (适用于 Full 和 Segment 模式)
+            cc = OpenCC('t2s')
+            
+            with open(self.output_txt, "w", encoding="utf-8") as f:
+                current_spk = None
+                line_buffer = []
+
+                for seg in result["segments"]:
+                    # 兼容性处理：如果某段没有对齐词信息，降级处理
+                    if "words" not in seg:
+                        # 整个 segment 当作一个原子处理
                         spk = seg.get("speaker", "未知")
-                        text = cc.convert(seg["text"]).strip()
-                        if text:
-                            f.write(f"[{spk}] {text}\n")
-            else:
-                # Segment 模式：调用自定义导出函数
-                export_results(
-                    result["segments"], 
-                    result.get("diarize_data"), 
-                    self.output_txt
-                )
+                        text = seg.get("text", "")
+                        
+                        # 如果和当前正在缓存的说话人不一样，先 flush
+                        if spk != current_spk and current_spk is not None:
+                            full_text = "".join(line_buffer)
+                            converted = cc.convert(full_text).strip()
+                            if converted:
+                                f.write(f"[{current_spk}] {converted}\n")
+                            line_buffer = []
+                        
+                        current_spk = spk
+                        line_buffer.append(text)
+                        continue
+
+                    # 正常情况：遍历每个词
+                    for word_info in seg["words"]:
+                        spk = word_info.get("speaker", "未知")
+                        word_text = word_info.get("word", "")
+                        
+                        if current_spk is None:
+                            current_spk = spk
+                        
+                        # 说话人变了 -> 换行
+                        if spk != current_spk:
+                            full_text = "".join(line_buffer)
+                            converted = cc.convert(full_text).strip()
+                            if converted:
+                                f.write(f"[{current_spk}] {converted}\n")
+                            
+                            # 重置
+                            current_spk = spk
+                            line_buffer = []
+                            line_buffer.append(word_text)
+                        else:
+                            # 说话人没变 -> 追加
+                            line_buffer.append(word_text)
+                
+                # 循环结束，写入最后缓存的一行
+                if line_buffer:
+                    full_text = "".join(line_buffer)
+                    converted = cc.convert(full_text).strip()
+                    if converted:
+                        f.write(f"[{current_spk}] {converted}\n")
                 
             logger.info(f"[Processor] Done! Output: {self.output_txt}")
 

@@ -103,47 +103,93 @@ class SegmentStrategy(TranscribeStrategy):
         # 1. 转录 (带缓存)
         result = self._transcribe_with_cache(model, audio_path, config, cache_file)
         
-        # 2. 说话人识别 (分段执行 Logic mapped from previous SegmentedDiarization)
-        logger.info(">> Step 2: Segmented Diarization...")
+        # 2. 准备 Align 模型 (新增：为了获得 Word-Level 时间戳)
+        device = config.get("device", "cuda")
+        logger.info(">> Loading Alignment Model for Segment Mode...")
+        model_a, metadata = whisperx.load_align_model(
+            language_code=result["language"], 
+            device=device
+        )
+
+        # 3. 分段处理 (Alignment + Diarization + Assign)
+        logger.info(">> Step 2: Segmented Processing (Align + Diarize + Assign)...")
         audio = whisperx.load_audio(audio_path)
         
         total_sec = len(audio) / 16000
         chunk_sec = self.chunk_mins * 60
-        all_chunks = []
+        all_segments = [] # 存储处理后的所有 segments (带 speaker 标签)
+        
         min_speakers = config.get("min_speakers")
         max_speakers = config.get("max_speakers")
 
         for i, start_s in enumerate(range(0, int(total_sec), chunk_sec)):
             end_s = min(start_s + chunk_sec, total_sec)
-            logger.info(f"   -> Diarize Chunk {i+1}: {int(start_s//60)}-{int(end_s//60)} min")
+            logger.info(f"   -> Processing Chunk {i+1}: {int(start_s//60)}-{int(end_s//60)} min")
             
-            # Slice audio directly from loaded array
+            # A. 提取本段音频
             chunk_audio = audio[int(start_s * 16000) : int(end_s * 16000)]
             
+            # B. 筛选属于本段的 Transcription Segments
+            chunk_transcription = {"segments": [], "language": result["language"]}
+            for seg in result["segments"]:
+                # 如果很多 seg 跨越了边界，这里可能需要更复杂的逻辑
+                # 但简单起见，只要中心点在范围内就算
+                mid = (seg['start'] + seg['end']) / 2
+                if start_s <= mid < end_s:
+                    # 必须把时间偏移量减掉，Align模型才能对齐 (因为输入的是切片音频)
+                    seg_copy = seg.copy()
+                    seg_copy['start'] -= start_s
+                    seg_copy['end'] -= start_s
+                    chunk_transcription["segments"].append(seg_copy)
+            
+            if not chunk_transcription["segments"]:
+                continue
+
             try:
-                # Run diarization on chunk
-                df = diarize_model(
+                # C. Align (获取字级时间戳)
+                aligned_result = whisperx.align(
+                    chunk_transcription["segments"], 
+                    model_a, 
+                    metadata, 
+                    chunk_audio, 
+                    device, 
+                    return_char_alignments=False
+                )
+                
+                # D. Diarize
+                diarize_segments = diarize_model(
                     chunk_audio, 
                     min_speakers=min_speakers, 
                     max_speakers=max_speakers
                 )
                 
-                # Use standard pandas functionality to avoid copy warnings if needed, 
-                # but direct reassignment is usually fine here on fresh DF
-                df['start'] += start_s
-                df['end'] += start_s
+                # E. Assign Speakers (核心优化)
+                final_chunk_result = whisperx.assign_word_speakers(diarize_segments, aligned_result)
                 
-                all_chunks.append(df)
+                # F. 恢复时间偏移量
+                for seg in final_chunk_result["segments"]:
+                    seg['start'] += start_s
+                    seg['end'] += start_s
+                    if "words" in seg:
+                        for word in seg["words"]:
+                            if "start" in word: word['start'] += start_s
+                            if "end" in word: word['end'] += start_s
+                            
+                all_segments.extend(final_chunk_result["segments"])
+
             except Exception as e:
                 logger.error(f"    Chunk {i+1} Failed: {e}")
+                # 降级：保留原始 transcription，标记为未知
+                for seg in chunk_transcription["segments"]:
+                     seg['start'] += start_s
+                     seg['end'] += start_s
+                     all_segments.append(seg)
             
             gc.collect()
 
-        diarize_data = None
-        if all_chunks:
-            diarize_data = pd.concat(all_chunks, ignore_index=True)
-
-        # 3. 【核心逻辑】挂载数据，留给 Processor 中的 export_results 处理
-        result["diarize_data"] = diarize_data
+        # 4. 替换 result["segments"] 为带有 speaker 信息的 segments
+        result["segments"] = sorted(all_segments, key=lambda x: x['start'])
         
+        # 释放资源
+        del model_a
         return result
