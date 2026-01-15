@@ -126,8 +126,18 @@ class WhisperProcessor:
 
                     # 正常情况：遍历每个词
                     for word_info in seg["words"]:
-                        spk = word_info.get("speaker", "未知")
+                        spk = word_info.get("speaker")
                         word_text = word_info.get("word", "")
+                        
+                        # 【修复】未知说话人平滑逻辑
+                        # 如果当前词没有分配到说话人 (可能太短或 VAD 没切准)
+                        if not spk:
+                            if current_spk:
+                                # 策略 A: 继承上一个人的身份 (假设是同一句话的延续)
+                                spk = current_spk
+                            else:
+                                # 策略 B: 确实不知道是谁 (比如开头就是杂音)
+                                spk = "未知"
                         
                         if current_spk is None:
                             current_spk = spk
