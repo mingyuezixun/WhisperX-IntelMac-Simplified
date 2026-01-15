@@ -18,5 +18,5 @@ num_speakers: 2 # 预估说话人数，默认为2，如果不是2个人记得修
 language: "zh" # 语言代码，如 zh, en
 
 # 分段处理配置
-mode: "segmented" # 可选值：full（全量）, segmented （分段）
+mode: "full" # 可选值：full（全量）, segmented （分段）
 chunk: 10 # 如果mode=segmented，则每个音频块的时长，单位为分钟
