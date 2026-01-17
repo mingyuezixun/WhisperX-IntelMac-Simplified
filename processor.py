@@ -104,6 +104,8 @@ class WhisperProcessor:
             with open(self.output_txt, "w", encoding="utf-8") as f:
                 current_spk = None
                 line_buffer = []
+                last_word_end_time = 0.0  # 追踪上一个词的结束时间
+                merged_once = False  # 【关键】每次换人后只允许合并一次
 
                 for seg in result["segments"]:
                     # 兼容性处理：如果某段没有对齐词信息，降级处理
@@ -119,6 +121,7 @@ class WhisperProcessor:
                             if converted:
                                 f.write(f"[{current_spk}] {converted}\n")
                             line_buffer = []
+                            merged_once = False
                         
                         current_spk = spk
                         line_buffer.append(text)
@@ -128,6 +131,8 @@ class WhisperProcessor:
                     for word_info in seg["words"]:
                         spk = word_info.get("speaker")
                         word_text = word_info.get("word", "")
+                        word_start = word_info.get("start", last_word_end_time)
+                        word_end = word_info.get("end", word_start)
                         
                         # 【修复】未知说话人平滑逻辑
                         # 如果当前词没有分配到说话人 (可能太短或 VAD 没切准)
@@ -142,20 +147,32 @@ class WhisperProcessor:
                         if current_spk is None:
                             current_spk = spk
                         
-                        # 说话人变了 -> 换行
+                        # 说话人变了 -> 判断是否需要换行
                         if spk != current_spk:
-                            full_text = "".join(line_buffer)
-                            converted = cc.convert(full_text).strip()
-                            if converted:
-                                f.write(f"[{current_spk}] {converted}\n")
-                            
-                            # 重置
-                            current_spk = spk
-                            line_buffer = []
-                            line_buffer.append(word_text)
+                            # 【智能合并】基于时间间隔 + 内容长度 + 限制一次
+                            time_gap = word_start - last_word_end_time
+                            if time_gap <= 0.3 and len(word_text) <= 3 and line_buffer and not merged_once:
+                                # 合并到当前说话人，不切换
+                                line_buffer.append(word_text)
+                                merged_once = True  # 已用掉一次机会
+                            else:
+                                # 正常换行
+                                full_text = "".join(line_buffer)
+                                converted = cc.convert(full_text).strip()
+                                if converted:
+                                    f.write(f"[{current_spk}] {converted}\n")
+                                
+                                # 重置
+                                current_spk = spk
+                                line_buffer = []
+                                line_buffer.append(word_text)
+                                merged_once = False  # 新说话人开始，重置
                         else:
                             # 说话人没变 -> 追加
                             line_buffer.append(word_text)
+                        
+                        # 更新时间追踪
+                        last_word_end_time = word_end
                 
                 # 循环结束，写入最后缓存的一行
                 if line_buffer:
